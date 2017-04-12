@@ -40,6 +40,8 @@ class BatchPolopt(RLAlgorithm):
             sampler_cls=None,
             sampler_args=None,
             force_batch_sampler=False,
+            # whether to use q_prop or a_prop
+            which_q_prop=1,
             # qprop params
             qf=None,
             min_pool_size=10000,
@@ -103,7 +105,11 @@ class BatchPolopt(RLAlgorithm):
         self.fixed_horizon = fixed_horizon
         self.qf = qf
         if self.qf is not None:
-            self.qprop = True
+            if which_q_prop == 1:
+                self.qprop = True
+            else:
+                self.qprop = False
+                self.aprop = True
             self.qprop_optimizer = Serializable.clone(self.optimizer)
             self.min_pool_size = min_pool_size
             self.replay_pool_size = replay_pool_size
@@ -142,6 +148,7 @@ class BatchPolopt(RLAlgorithm):
                 self.qprop_enable = False
         else:
             self.qprop = False
+            self.aprop = False
         if sampler_cls is None:
             if self.policy.vectorized and not force_batch_sampler:
                 sampler_cls = VectorizedSampler
@@ -184,7 +191,7 @@ class BatchPolopt(RLAlgorithm):
             for itr in range(self.start_itr, self.n_itr):
                 itr_start_time = time.time()
                 with logger.prefix('itr #%d | ' % itr):
-                    if self.qprop and not self.qprop_enable and \
+                    if self.qprop or self.aprop and not self.qprop_enable and \
                             itr >= self.qprop_min_itr:
                         logger.log("Restarting workers with batch size %d->%d..."%(
                             self.batch_size, self.qprop_batch_size))
@@ -200,7 +207,7 @@ class BatchPolopt(RLAlgorithm):
                     samples_data = self.process_samples(itr, paths)
                     logger.log("Logging diagnostics...")
                     self.log_diagnostics(paths)
-                    if self.qprop:
+                    if self.qprop or self.aprop:
                         logger.log("Adding samples to replay pool...")
                         self.add_pool(itr, paths, pool)
                         logger.log("Optimizing critic before policy...")
@@ -236,17 +243,23 @@ class BatchPolopt(RLAlgorithm):
 
     def init_opt_critic(self, vars_info, qbaseline_info):
         assert(not self.policy.recurrent)
-
-        # Compute Taylor expansion Q function
-        delta = vars_info["action_var"] - qbaseline_info["action_mu"]
-        control_variate = tf.reduce_sum(delta * qbaseline_info["qprime"], 1)
-        if not self.qprop_use_advantage:
-            control_variate += qbaseline_info["qvalue"]
-            logger.log("Qprop, using Q-value over A-value")
-        f_control_variate = tensor_utils.compile_function(
-            inputs=[vars_info["obs_var"], vars_info["action_var"]],
-            outputs=[control_variate, qbaseline_info["qprime"]],
-        )
+        if self.qprop:
+            # Compute Taylor expansion Q function
+            delta = vars_info["action_var"] - qbaseline_info["action_mu"]
+            control_variate = tf.reduce_sum(delta * qbaseline_info["qprime"], 1)
+            if not self.qprop_use_advantage:
+                control_variate += qbaseline_info["qvalue"]
+                logger.log("Qprop, using Q-value over A-value")
+            f_control_variate = tensor_utils.compile_function(
+                inputs=[vars_info["obs_var"], vars_info["action_var"]],
+                outputs=[control_variate, qbaseline_info["qprime"]],
+            )
+        else:
+            # A-prop is simpler
+            f_control_variate = tensor_utils.compile_function(
+                inputs=[vars_info["obs_var"], vars_info["action_var"]],
+                outputs=[qbaseline_info["avalue"], qbaseline_info["aprime"]],
+            )
 
         target_qf = Serializable.clone(self.qf, name="target_qf")
 

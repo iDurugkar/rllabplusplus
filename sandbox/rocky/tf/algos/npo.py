@@ -132,6 +132,19 @@ class NPO(BatchPolopt):
                 constraint_name="mean_kl"
             )
             self.init_opt_critic(vars_info=vars_info, qbaseline_info=qbaseline_info)
+        elif self.aprop:
+            qbaseline_info = self.qf_baseline.get_qbaseline_sim(
+                vars_info["obs_var"], vars_info["action_var"], scale_reward=self.scale_reward)
+            qprop_surr_loss = - tf.reduce_mean(vars_info["lr"] * vars_info["advantage_var"]) - tf.reduce_mean(
+                qbaseline_info["aprime"])
+            self.qprop_optimizer.update_opt(
+                loss=qprop_surr_loss,
+                target=self.policy,
+                leq_constraint=(vars_info["mean_kl"], self.step_size),
+                inputs=vars_info["input_list"],
+                constraint_name="mean_kl"
+            )
+            self.init_opt_critic(vars_info=vars_info, qbaseline_info=qbaseline_info)
         return dict()
 
     def merge_input_values(self, all_input_values):
@@ -168,6 +181,10 @@ class NPO(BatchPolopt):
             optimizer = self.qprop_optimizer
             all_input_values += (samples_data["etas"], )
             logger.log("Using Qprop optimizer")
+        if self.aprop and self.qprop_enable:
+            optimizer = self.qprop_optimizer
+            # all_input_values += (samples_data["etas"],)
+            logger.log("Using Qprop optimizer for Aprop")
         else:
             optimizer = self.optimizer
         logger.log("Computing loss before")

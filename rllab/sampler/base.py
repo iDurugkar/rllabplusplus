@@ -112,6 +112,20 @@ class BaseSampler(Sampler):
                 advantages_scale = np.abs(advantages).mean()
                 logger.record_tabular("AbsLearnSignalNew", advantages_scale)
                 logger.record_tabular("AbsLearnSignal", advantages_scale)
+            elif hasattr(self.algo, 'aprop') and self.algo.aprop and self.algo.qprop_enable:
+                old_advantages = np.copy(advantages)
+                old_advantages = self.process_advantages(old_advantages)
+                old_advantages_scale = np.abs(old_advantages).mean()
+                logger.record_tabular("AbsLearnSignalOld", old_advantages_scale)
+                logger.log("Qprop, subtracting control variate")
+                # Advantages bar is the control variate,
+                # We want to estimate it
+                advantages_bar = self.algo.get_control_variate(observations=observations, actions=actions)
+                advantages -= advantages_bar
+                advantages = self.process_advantages(advantages)
+                advantages_scale = np.abs(advantages).mean()
+                logger.record_tabular("AbsLearnSignalNew", advantages_scale)
+                logger.record_tabular("AbsLearnSignal", advantages_scale)
             else:
                 advantages = self.process_advantages(advantages)
                 advantages_scale = np.abs(advantages).mean()
