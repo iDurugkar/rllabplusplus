@@ -31,9 +31,9 @@ algo = TRPO(
     policy=policy,
     baseline=baseline,
     qf_baseline=qf_baseline,
-    batch_size=4000,
+    batch_size=50,
     max_path_length=100,
-    n_itr=40,
+    n_itr=400,
     discount=0.99,
     step_size=0.01,
     # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
@@ -42,6 +42,6 @@ algo = TRPO(
 )
 run_experiment_lite(
     algo.train(),
-    n_parallel=4,
+    n_parallel=1,
     seed=1,
 )

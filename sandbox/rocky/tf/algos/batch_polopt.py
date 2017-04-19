@@ -176,7 +176,7 @@ class BatchPolopt(RLAlgorithm):
     def train(self):
         with tf.Session() as sess:
             sess.run(tf.initialize_all_variables())
-            if self.qprop:
+            if self.qprop or self.aprop:
                 pool = SimpleReplayPool(
                     max_pool_size=self.replay_pool_size,
                     observation_dim=self.env.observation_space.flat_dim,

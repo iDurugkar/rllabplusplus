@@ -15,9 +15,9 @@ class AfunctionBaseline(Baseline, Serializable):
         self.qf = qf
         self.policy = policy
 
-    def get_action(self, mean, log_std_dev):
+    def get_action(self, mean, log_std_dev, num):
         # act = tf.random_normal((num,), mean=mean, stddev=tf.exp(log_std_dev))
-        act = tf.random_normal([])
+        act = tf.random_normal([num])
         act = act * tf.exp(log_std_dev) + mean
         return act
 
@@ -28,25 +28,25 @@ class AfunctionBaseline(Baseline, Serializable):
         q_samples = []
 
         # print(actions.get_shape())
-        for ai in range(1000):
-            action = self.get_action(info_vars["mean"], info_vars["log_std"])
+        actions = self.get_action(info_vars["mean"], info_vars["log_std"], 50)
+        for ai in range(50):
             q_temp = self.qf.get_qval_sym(
-                obs_var, action,
+                obs_var, actions[ai],
                 deterministic=True,
             )
             q_samples.append(q_temp)
         value = tf.stop_gradient(tf.reduce_mean(q_samples, reduction_indices=0))
 
         aprime_samples = []
-        # actions = self.get_action(1000, info_vars["mean"], info_vars["log_std"])
-        for ai in range(1000):
-            action = self.get_action(info_vars["mean"], info_vars["log_std"])
+        actions = self.get_action(info_vars["mean"], info_vars["log_std"], 50)
+        for ai in range(50):
+            # action = self.get_action(info_vars["mean"], info_vars["log_std"])
             q_temp = self.qf.get_qval_sym(
-                obs_var, action,
+                obs_var, actions[ai],
                 deterministic=True,
             )
             a_temp = q_temp - value
-            aprime_temp = tf.gradients(a_temp, action)[0]
+            aprime_temp = tf.gradients(a_temp, actions[ai])[0]
             aprime_samples.append(aprime_temp*a_temp)
         aprime = tf.reduce_mean(aprime_samples, reduction_indices=0)
         # action_mu = info_vars["mean"]
